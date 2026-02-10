@@ -1,0 +1,174 @@
+## 클러스터IP(ClusterIP)의 상세 분석
+
+**클러스터IP(ClusterIP)**는 쿠버네티스의 가장 기본이 되는 서비스 타입으로, 클러스터 **내부 포드 간의 통신**을 위해 사용되는 가상 IP입니다. 외부에서는 접근할 수 없으며, 클러스터 내부의 노드나 포드에서만 접근이 가능합니다.
+
+---
+
+### 1. 주요 특징 및 작동 원리
+
+* **내부 전용 고정 IP**: 서비스가 생성될 때 클러스터 내부의 프라이빗 네트워크 대역에서 고정된 IP를 할당받습니다.
+* **로드 밸런싱**: 서비스에 연결된 여러 개의 포드(Endpoints) 사이에서 트래픽을 분산시킵니다. (기본적으로는 라운드 로빈 방식)
+* **서비스 디스커버리**: IP뿐만 아니라 서비스의 이름을 통해 통신할 수 있습니다. (예: `http://my-service`)
+
+---
+
+### 2. ClusterIP의 핵심 필드와 포트 매핑
+
+YAML 파일에서 포트 설정 시 세 가지 포트 개념을 정확히 구분하는 것이 중요합니다.
+
+```yaml
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80          # 1. 서비스 자체가 노출하는 포트 (클라이언트가 접속하는 포트)
+      targetPort: 8080  # 2. 실제 포드(컨테이너) 내부에서 리스닝 중인 포트
+      protocol: TCP
+
+```
+
+1. **port**: 클러스터 내부의 다른 포드들이 이 서비스의 IP로 접속할 때 사용하는 포트입니다.
+2. **targetPort**: 서비스가 받은 트래픽을 전달할 포드 내부의 실제 포트입니다. 보통 애플리케이션의 설정 포트와 일치시킵니다.
+
+---
+
+### 3. 내부 통신 흐름 (Data Path)
+
+1. **클라이언트 포드**가 서비스 이름(`my-service`)으로 요청을 보냅니다.
+2. 클러스터 내부의 **CoreDNS**가 서비스 이름을 **ClusterIP**(`10.96.x.x`)로 변환합니다.
+3. 각 노드에서 실행 중인 **kube-proxy**가 가상 IP로 들어온 요청을 가로채서 실제 목적지인 **포드 IP**로 전달합니다.
+
+---
+
+### 4. 특별한 형태: 헤드리스 서비스 (Headless Service)
+
+`spec.clusterIP: None`으로 설정하면 가상 IP를 할당하지 않는 **헤드리스 서비스**가 됩니다.
+
+* **용도**: 스테이트풀셋(StatefulSet)처럼 각 포드에 직접 개별적으로 접근해야 할 때 사용합니다.
+* **작동**: DNS 조회를 하면 서비스 IP 대신, 해당 서비스에 연결된 **모든 포드의 개별 IP 리스트**를 반환합니다.
+
+---
+
+### 💡 실무 전문가의 팁: 세션 유지 (Session Affinity)
+
+특정 클라이언트가 보낸 요청을 항상 같은 포드로 보내야 하는 경우(예: 세션 로그인 정보 유지), `spec.sessionAffinity: ClientIP` 설정을 추가하세요. 이를 통해 클라이언트의 IP 주소를 기반으로 동일한 포드에 트래픽을 고정할 수 있습니다.
+
+---
+## 서비스(Service)와 파드(Pod)의 연결 구조
+
+서비스와 파드가 정상적으로 통신하기 위해서는 서비스의 **Selector**와 파드의 **Labels**가 토씨 하나 틀리지 않고 일치해야 합니다. 아래는 하나의 서비스가 세 개의 파드를 식별하여 트래픽을 분배하는 실제 YAML 구성 예시입니다.
+
+---
+
+### 1. 서비스(Service) 정의
+
+이 서비스는 `app: web-server`라는 이름표를 가진 모든 파드를 추적하여, 80번 포트로 들어오는 요청을 각 파드의 8080번 포트로 전달합니다.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-web-svc
+spec:
+  type: ClusterIP
+  selector:           # [연결 고리] 이 셀렉터가 아래 파드들의 labels를 검색함
+    app: web-server   # 찾을 이름표: web-server
+  ports:
+    - protocol: TCP
+      port: 80        # 서비스 접속 포트 (Virtual IP의 포트)
+      targetPort: 8080 # 실제 파드 내부에서 애플리케이션이 사용하는 포트
+
+```
+
+---
+
+### 2. 세 개의 파드(Pod) 정의
+
+각 파드는 서로 다른 이름(`metadata.name`)을 가지지만, 서비스가 찾는 **`app: web-server`**라는 동일한 라벨을 명시하여 하나의 그룹으로 묶입니다.
+
+#### 파드 01 (Primary)
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-1
+  labels:             # 서비스의 selector와 일치
+    app: web-server
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    ports:
+    - containerPort: 8080
+
+```
+
+#### 파드 02 (Secondary)
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-2
+  labels:             # 서비스의 selector와 일치
+    app: web-server
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    ports:
+    - containerPort: 8080
+
+```
+
+#### 파드 03 (Backup)
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-3
+  labels:             # 서비스의 selector와 일치
+    app: web-server
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    ports:
+    - containerPort: 8080
+
+```
+
+---
+
+### 3. 연결 메커니즘 분석
+
+* **Label 매칭**: 서비스의 `spec.selector.app` 값이 `web-server`이므로, 파드의 `metadata.labels.app` 값도 반드시 `web-server`여야 합니다.
+* **Endpoints 생성**: 위 설정이 완료되면 쿠버네티스 API 서버는 자동으로 `Endpoints` 객체를 생성합니다. 여기에 실시간으로 활성화된 `pod-1`, `pod-2`, `pod-3`의 IP 주소가 리스트업됩니다.
+* **트래픽 분산**: 클라이언트가 `http://my-web-svc`로 요청을 보내면, 서비스는 Endpoints 리스트에 등록된 IP 중 하나로 트래픽을 무작위 배분합니다.
+
+---
+
+### 💡 실전 팁: 실무에서의 구성
+
+현업에서는 파드를 위와 같이 개별적으로 생성하지 않습니다. **디플로이먼트(Deployment)** 오브젝트를 생성하고 `replicas: 3`을 설정하면, 동일한 라벨을 가진 파드 3개가 자동으로 생성되어 서비스에 즉시 연결됩니다.
+
+---
+
+### ⚠️ 비용 및 유료 전환 주의사항
+
+* **ClusterIP 비용**: 서비스 타입이 ClusterIP인 경우 쿠버네티스 내부 가상 네트워크 설정이므로 별도의 클라우드 과금이 발생하지 않습니다.
+* **리소스 소모**: 파드 개수가 늘어남에 따라 노드의 CPU와 메모리 자원을 소모합니다. 노드의 자원이 한계에 도달하면 AWS EKS의 경우 **Auto Scaling**에 의해 새로운 EC2 인스턴스가 생성되어 비용이 증가할 수 있습니다.
+
+---
+
+**Next Step: Endpoints 리스트 확인 및 서비스 이름 기반 통신 테스트**
+
+Next Step: **kubectl get endpoints 확인** | **CoreDNS 서비스 이름 조회** | **Deployment를 이용한 파드 일괄 관리**
+
+사용자의 요청에 따라 박스 형태의 가독성 저하 요소를 제거하고, 이전에 약속한 교재 포맷과 깃허브 마크다운 형식을 엄격히 준수하여 다시 작성했습니다. 불필요한 서술형 인사를 배제하고 핵심 내용 위주로 구성했습니다.
+
+**Next Step: 외부 접속을 위한 NodePort 및 LoadBalancer 서비스 확장**
+
+Next Step: **NodePort 동작 원리** | **서비스 이름 기반 DNS 통신 실습** | **Endpoints 오브젝트 확인 방법**

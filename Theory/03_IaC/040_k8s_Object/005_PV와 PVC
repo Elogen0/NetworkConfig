@@ -1,0 +1,271 @@
+## Kubernetes Storage: PV와 PVC의 개념 및 동작 원리
+
+쿠버네티스 환경에서 컨테이너 내부의 데이터는 컨테이너가 종료되면 사라지는 **휘발성**을 가집니다. 이를 해결하기 위해 영구 저장소인 **PV(Persistent Volume)**와 **PVC(Persistent Volume Claim)** 시스템을 사용하여 인프라와 애플리케이션의 결합도를 낮추고 데이터를 보존합니다.
+
+---
+
+### 1. PV (Persistent Volume)
+
+PV는 클러스터 관리자가 미리 생성하거나 동적으로 할당된 **실제 물리 저장소 자원**입니다.
+
+* **인프라 관점:** 실제 데이터가 저장되는 디스크(AWS EBS, NFS, 로컬 디스크 등)를 의미합니다.
+* **독립적 생명주기:** PV는 이를 사용하는 파드(Pod)의 생명주기와 관계없이 독립적으로 존재합니다.
+* **설정 요소:** 용량, 접근 모드(ReadWriteOnce 등), 회수 정책(Retain, Delete 등)을 포함합니다.
+
+---
+
+### 2. PVC (Persistent Volume Claim)
+
+PVC는 사용자가 스토리지 자원을 사용하기 위해 제출하는 **요청서**입니다.
+
+* **사용자 관점:** "최소 10GB 공간이 필요하고 읽기/쓰기가 가능해야 한다"는 요구사항을 정의합니다.
+* **추상화:** 개발자는 실제 스토리지가 AWS EBS인지 온프레미스 NFS인지 알 필요 없이 PVC만 작성하면 됩니다.
+* **바인딩:** 쿠버네티스 마스터가 PVC의 요구사항과 일치하는 PV를 찾아 두 객체를 서로 연결(Binding)합니다.
+
+---
+
+### 3. 주요 생명주기 및 흐름
+
+1. **프로비저닝 (Provisioning):** * **정적(Static):** 관리자가 수동으로 PV를 생성합니다.
+* **동적(Dynamic):** `StorageClass`를 통해 PVC가 요청될 때 자동으로 PV가 생성됩니다. (대규모 환경에서 권장)
+
+
+2. **바인딩 (Binding):** PVC의 조건에 맞는 PV를 시스템이 찾아 매핑합니다. 1:1 관계입니다.
+3. **사용 (Using):** 파드 정의서에 PVC 이름을 명시하여 볼륨으로 마운트합니다.
+4. **회수 (Reclaiming):** PVC를 삭제했을 때 남은 PV를 어떻게 처리할지 결정합니다.
+* **Retain:** 데이터와 PV를 그대로 보존 (수동 삭제 필요).
+* **Delete:** 실제 물리 스토리지까지 삭제 (AWS EBS 등 클라우드 기본값).
+
+
+
+---
+
+### 4. 접근 모드 (Access Modes)
+
+| 모드 | 설명 |
+| --- | --- |
+| **ReadWriteOnce (RWO)** | 단일 노드에서만 읽기/쓰기로 마운트 가능 |
+| **ReadOnlyMany (ROX)** | 여러 노드에서 읽기 전용으로 마운트 가능 |
+| **ReadWriteMany (RWX)** | 여러 노드에서 읽기/쓰기로 마운트 가능 (NFS 등 지원 필요) |
+
+---
+
+### 5. 비용 발생 주의 (AWS 연동 시)
+
+AWS 환경에서 PV를 EBS(Elastic Block Store)로 생성할 경우, 파드 사용 여부와 관계없이 **EBS 볼륨 크기만큼 비용이 발생**합니다.
+
+* **과금 요인:** 할당된 GiB당 월정액 비용이 청구됩니다.
+* **주의사항:** PVC를 삭제하더라도 PV의 Reclaim Policy가 `Retain`으로 되어 있으면 실제 EBS 볼륨이 삭제되지 않아 계속 과금될 수 있습니다. 반드시 AWS 콘솔에서 EBS 볼륨 상태를 확인해야 합니다.
+
+---
+
+**Next Step: StorageClass를 활용한 동적 프로비저닝 실습**
+
+## Persistent Volume(PV) 및 PersistentVolumeClaim(PVC) 통합 가이드
+
+쿠버네티스의 스토리지 시스템을 구성하는 두 핵심 요소인 PV와 PVC의 정의부터 실제 실행 및 검증까지의 전 과정을 통합하여 정리합니다.
+
+---
+
+### 1. 스토리지 구성 YAML 매니페스트
+
+아래는 AWS EBS를 백엔드로 사용하는 PV와 이를 요청하는 PVC의 통합 설정입니다. 각 라인별 의미를 상세히 분석합니다.
+
+```yaml
+# --- PersistentVolume (실제 저장소 자원 정의) ---
+apiVersion: v1                                         # 쿠버네티스 API 버전 정의
+kind: PersistentVolume                                # 리소스 종류가 PV임을 명시
+metadata:                                           # 메타데이터 시작
+  name: ebs-pv-storage                              # PV의 고유 이름 설정
+  labels:                                          # 검색 및 필터링을 위한 라벨
+    type: local
+spec:                                                  # PV 상세 사양 시작
+  capacity:                                           # 저장 용량 설정
+    storage: 10Gi                                     # 10GiB 용량 할당
+  volumeMode: Filesystem                             # 파일시스템 방식으로 사용
+  accessModes:                                        # 접근 모드 설정
+    - ReadWriteOnce                                  # 하나의 노드에서만 읽기/쓰기 가능
+  persistentVolumeReclaimPolicy: Retain               # PVC 삭제 후에도 PV와 데이터를 보존함
+  storageClassName: manual                           # PVC와 매칭될 클래스 이름 (중요)
+  awsElasticBlockStore:                              # AWS EBS 백엔드 설정
+    volumeID: "<VOLUME_ID>"                            # AWS에서 생성한 실제 EBS 볼륨 ID
+    fsType: ext4                                    # 파일시스템 형식 지정
+---
+# --- PersistentVolumeClaim (사용자의 스토리지 요청서) ---
+apiVersion: v1                                    # 쿠버네티스 API 버전 정의
+kind: PersistentVolumeClaim                         # 리소스 종류가 PVC임을 명시
+metadata:                                         # 메타데이터 시작
+  name:  ebs-pvc-claim                             # PVC의 이름 설정 (Pod에서 참조 시 사용)
+spec:                                                # 요청 사양 시작
+  accessModes:                                 # 필요한 접근 모드 정의
+    - ReadWriteOnce                                    # PV의 설정과 일치해야 함
+  resources:                                  # 필요한 자원 정의
+    requests:                                     # 최소 요구 자원 설정
+      storage: 5Gi                               # 5GiB 이상의 PV를 찾아서 바인딩함
+  storageClassName: manual                    # PV의 storageClassName과 반드시 일치해야 함
+
+```
+
+---
+
+### 2. 단계별 실행 및 상태 점검
+
+작성된 YAML 파일을 클러스터에 반영하고 정상 동작 여부를 확인하는 절차입니다.
+
+**Step 1: 리소스 생성**
+
+```bash
+# 파일명을 storage-setup.yaml로 저장했다고 가정
+kubectl apply -f storage-setup.yaml
+
+```
+
+**Step 2: 바인딩 상태 확인**
+
+```bash
+kubectl get pv,pvc
+
+```
+
+* **성공 시:** `STATUS` 컬럼이 **`Bound`**로 표시됩니다.
+* **실패 시:** `storageClassName`이 다르거나 용량이 부족할 경우 `Pending` 상태에 머무릅니다.
+
+---
+
+### 3. Pod 연결 및 데이터 영속성 검증
+
+생성된 PVC를 실제 파드에 마운트하여 데이터가 유지되는지 확인하는 실습 과정입니다.
+
+**Step 3: Pod 생성 및 볼륨 마운트**
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: storage-app-pod
+spec:
+  containers:
+    - name: data-worker
+      image: busybox
+      command: ["/bin/sh", "-c", "while true; do sleep 3600; done"]
+      volumeMounts:
+        - mountPath: "/mnt/data" # 파드 내부의 경로
+          name: my-ebs-volume
+  volumes:
+    - name: my-ebs-volume
+      persistentVolumeClaim:
+        claimName: ebs-pvc-claim # 위에서 생성한 PVC 이름
+
+```
+
+**Step 4: 데이터 쓰기 및 파드 재시작 테스트**
+
+1. **데이터 쓰기:** `kubectl exec storage-app-pod -- sh -c "echo 'Cluster Data' > /mnt/data/test.txt"`
+2. **파드 삭제:** `kubectl delete pod storage-app-pod`
+3. **파드 재생성:** `kubectl apply -f pod-config.yaml`
+4. **데이터 확인:** `kubectl exec storage-app-pod -- cat /mnt/data/test.txt`
+* `Cluster Data`가 출력되면 영구 저장소 구성이 완료된 것입니다.
+
+
+
+---
+
+### 4. AWS 인프라 및 과금 관리
+
+* **EBS 비용 발생:** `awsElasticBlockStore`를 정의하는 순간, 실제 데이터 저장 여부와 관계없이 해당 용량(10Gi)만큼 **AWS EBS 월정액 비용**이 청구됩니다.
+* **정리 절차:**
+1. `kubectl delete pvc,pv --all` 명령으로 쿠버네티스 리소스를 삭제합니다.
+2. **AWS 콘솔(EC2 > Volumes)**에 접속하여 해당 Volume ID의 상태가 `available`인지 확인 후, 반드시 **'볼륨 삭제'**를 직접 수행해야 과금이 중단됩니다.
+
+
+
+---
+
+**Next Step: Dynamic Provisioning 및 StorageClass**
+
+## PV/PVC 시스템 자원 삭제 및 환경 정리
+
+쿠버네티스에서 스토리지를 사용한 후에는 단순히 파드를 삭제하는 것만으로는 실제 물리 자원이 정리되지 않습니다. 특히 클라우드 환경(AWS)에서는 명확한 삭제 절차를 거치지 않으면 지속적으로 비용이 발생하므로 주의가 필요합니다.
+
+---
+
+### 1. 자원 삭제 표준 절차 (Step-by-Step)
+
+스토리지는 의존성 관계가 명확하므로 반드시 역순으로 삭제해야 오류가 발생하지 않습니다.
+
+**Step 1: 사용 중인 Pod 삭제**
+스토리지(PVC)를 붙잡고 있는 프로세스를 먼저 종료해야 합니다.
+
+```bash
+kubectl delete pod storage-app-pod
+
+```
+
+**Step 2: PersistentVolumeClaim(PVC) 삭제**
+사용자의 요청서(PVC)를 삭제합니다.
+
+```bash
+kubectl delete pvc ebs-pvc-claim
+
+```
+
+**Step 3: PersistentVolume(PV) 삭제**
+실제 리소스 정의(PV)를 삭제합니다.
+
+```bash
+kubectl delete pv ebs-pv-storage
+
+```
+
+---
+
+### 2. 회수 정책(Reclaim Policy)에 따른 데이터 처리
+
+PV 정의서의 `persistentVolumeReclaimPolicy` 설정값에 따라 삭제 후 동작이 달라집니다.
+
+* **Retain (보존):** * PVC를 삭제해도 PV는 `Released` 상태로 남으며, 실제 데이터는 보존됩니다.
+* 다른 PVC가 이 PV를 재사용하려면 관리자가 수동으로 데이터를 정리하고 PV를 다시 생성해야 합니다.
+
+
+* **Delete (삭제):** * PVC를 삭제하는 즉시 PV도 삭제되며, 연결된 외부 스토리지(AWS EBS 등)도 함께 삭제됩니다. (클라우드 동적 프로비저닝의 기본값)
+
+---
+
+### 3. AWS 인프라 최종 과금 확인 (가장 중요)
+
+쿠버네티스 명령어로 PV를 삭제했더라도, `Retain` 정책을 사용했거나 설정 오류가 있을 경우 AWS 계정에는 여전히 EBS 볼륨이 남아 과금될 수 있습니다.
+
+1. **AWS 관리 콘솔 접속:** [EC2 대시보드](https://console.aws.amazon.com/ec2/)로 이동합니다.
+2. **Volumes 메뉴 확인:** 좌측 메뉴의 **Elastic Block Store > Volumes**를 클릭합니다.
+3. **상태(State) 체크:** 사용했던 Volume ID의 상태가 **`available`** 인지 확인합니다. (`in-use`는 아직 삭제되지 않은 상태입니다.)
+4. **수동 삭제:** `available` 상태의 볼륨이 남아있다면 **Actions > Delete volume**을 선택하여 직접 삭제해야 더 이상의 과금을 방지할 수 있습니다.
+
+---
+
+### 4. 삭제 관련 트러블슈팅: 'Terminating' 상태 고착
+
+간혹 PVC를 삭제했는데 계속 `Terminating` 상태로 멈춰있는 경우가 있습니다. 이는 해당 PVC를 사용 중인 파드가 아직 완전히 종료되지 않았을 때 발생합니다.
+
+* **원인:** 쿠버네티스의 `Finalizers` 보호 기능 때문입니다.
+* **해결:** 연결된 파드가 모두 삭제되었는지 확인하고, 그래도 멈춰있다면 아래 명령어로 강제 패치하여 삭제할 수 있습니다.
+
+```bash
+kubectl patch pvc [PVC_이름] -p '{"metadata":{"finalizers":null}}' --type=merge
+
+```
+
+---
+
+**Next Step: StorageClass 및 Dynamic Provisioning**
+
+* 매번 수동으로 PV를 만들고 삭제하는 번거로움을 해결해 주는 자동화 방법을 알아볼까요?
+
+---
+
+요청하신 자원 삭제 절차와 주의사항을 교재 형식에 맞춰 추가했습니다. 특히 AWS 과금 방지를 위한 수동 삭제 확인 절차를 강조하여 작성했습니다.
+
+* [x] 리소스 삭제 명령어 및 순서 명시
+* [x] 회수 정책(Reclaim Policy) 설명 포함
+* [x] AWS EBS 수동 삭제 및 과금 방지 안내
+* [x] Terminating 상태 트러블슈팅 추가
+* [x] Next Step 핵심 단어 표기

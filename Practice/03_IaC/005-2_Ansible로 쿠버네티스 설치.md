@@ -1,7 +1,7 @@
 
 ### 인벤토리 파일
 각 노드에대한 정보를 담은 인벤토리 파일을 생성합니다. 로컬환경은 ansible_connection=local을 추가해야 합니다.<br>
-**host.ini**
+**hosts.ini**
 ```
 [k8s_master]
 192.168.109.251  ansible_connection=local
@@ -14,7 +14,39 @@
 ansible_user=master
 ```
 
-### 쿠버네티스 설치를 위한 Ansible Playbook
+
+### ssh키 공유
+상대측에서 sshkey를 모두 공유 했을경우 마스터에서 모든 워커노드에게 자신의 key 공유
+
+**ssh_key_distribute.yml**
+```yaml
+---
+- name: Distribute Master SSH key to all nodes
+  hosts: all
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Ensure .ssh directory exists
+      file:
+        path: /home/{{ ansible_user }}/.ssh
+        state: directory
+        mode: '0700'
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Copy Master public key to authorized_keys
+      authorized_key:
+        user: "{{ ansible_user }}"
+        state: present
+        key: "{{ lookup('file', '/home/{{ ansible_user }}/.ssh/id_rsa.pub') }}"
+```
+`ansible-playbook -i hosts.ini ssh_key_distribute.yml --ask-pass` <br>
+--ask-pass → 최초 접속할 때 비밀번호 입력
+이후부터는 비밀번호 없이 SSH 가능
+
+
+### 모든 노드에 쿠버네티스 설치를 위한 Ansible Playbook
 복제된 VM의 식별자 충돌 방지와 컨테이너 런타임 최적화를 포함한 파일입니다.
 
 **k8s_setup.yaml**
@@ -139,72 +171,6 @@ ansible-playbook -i hosts.ini k8s_setup.yaml -K
 
 ---
 
-### 마스터 노드 세팅
-**k8s_master_init.yaml**
-```yaml
----
-- name: Initialize Kubernetes Master Node
-  hosts: k8s_master
-  become: yes
-
-  tasks:
-    - name: Check if Kubernetes master is already initialized
-      ansible.builtin.stat:
-        path: /etc/kubernetes/admin.conf
-      register: k8s_init_check
-
-    - name: Initialize the Kubernetes Cluster (kubeadm init with config)
-      ansible.builtin.command: >
-        kubeadm init --config kubeadm-init.yaml
-      when: not k8s_init_check.stat.exists
-
-    - name: Create .kube directory for cluster config
-      ansible.builtin.file:
-        path: /home/{{ ansible_user }}/.kube
-        state: directory
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-        mode: '0755'
-
-    - name: Copy admin.conf to user's .kube directory
-      ansible.builtin.copy:
-        src: /etc/kubernetes/admin.conf
-        dest: /home/{{ ansible_user }}/.kube/config
-        remote_src: yes
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-        mode: '0600'
-
-    - name: Wait for Kubernetes API server
-      ansible.builtin.command: kubectl get nodes
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-      register: api_check
-      retries: 10
-      delay: 10
-      until: api_check.rc == 0
-
-    - name: Install Flannel CNI Network Plugin
-      ansible.builtin.command: >
-        kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
-      environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
-
-    - name: Generate join command for worker nodes
-      ansible.builtin.command: >
-        kubeadm token create --print-join-command
-      register: join_command_result
-
-    - name: Display join command
-      ansible.builtin.debug:
-        msg: "Worker Join Command: {{ join_command_result.stdout }}"
-      delegate_to: localhost
-```
-
-마스터 노드에서 `ansible-playbook -i hosts.ini k8s_master_init.yaml -K` 명령어로 실행시킵니다.
-
----
-
 ## Kubernetes Control Plane 구축
 클러스터를 처음 구축할 때(Provisioning), 마스터 노드(Control Plane)를 어떻게 구성할 것인지에 대한 선택은 운영 효율성과 유지보수 측면에서 매우 중요합니다. 
  **`kubeadm` 명령어를 사용하되, 설정값은 YAML 파일(Configuration File)로 관리하는 방식**이 가장 권장됩니다.
@@ -303,6 +269,73 @@ kubeadm init --config=kubeadm-config.yaml
 
 ---
 
+### 마스터 노드 세팅
+**k8s_master_init.yaml**
+```yaml
+---
+- name: Initialize Kubernetes Master Node
+  hosts: k8s_master
+  become: yes
+
+  tasks:
+    - name: Check if Kubernetes master is already initialized
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: k8s_init_check
+
+    - name: Initialize the Kubernetes Cluster (kubeadm init with config)
+      ansible.builtin.command: >
+        kubeadm init --config kubeadm-init.yaml
+      when: not k8s_init_check.stat.exists
+
+    - name: Create .kube directory for cluster config
+      ansible.builtin.file:
+        path: /home/{{ ansible_user }}/.kube
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+
+    - name: Copy admin.conf to user's .kube directory
+      ansible.builtin.copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/{{ ansible_user }}/.kube/config
+        remote_src: yes
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0600'
+
+    - name: Wait for Kubernetes API server
+      ansible.builtin.command: kubectl get nodes
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      register: api_check
+      retries: 10
+      delay: 10
+      until: api_check.rc == 0
+
+    - name: Install Flannel CNI Network Plugin
+      ansible.builtin.command: >
+        kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Generate join command for worker nodes
+      ansible.builtin.command: >
+        kubeadm token create --print-join-command
+      register: join_command_result
+
+    - name: Display join command
+      ansible.builtin.debug:
+        msg: "Worker Join Command: {{ join_command_result.stdout }}"
+      delegate_to: localhost
+```
+
+마스터 노드에서 `ansible-playbook -i hosts.ini k8s_master_init.yaml -K` 명령어로 실행시킵니다.
+CNI로 Flanel을 설치하는데 원하면 Calico로 찾아서 바꿔도 됩니다.
+
+---
+
 ## 워커 노드 Join
 세팅된 마스터에 워커 노드가 알아서 붙을수 있도록 Join 세팅을 해줍니다.
 ### kubeadm 토큰 생성
@@ -319,8 +352,10 @@ kubeadm join 192.168.109.251:6443 --token cv12sz.s4bcbw1sazqh2vhe --discovery-to
 
 ### kubeadm join파일 작성
 생성된 토큰을 통해 워커들이 마스터로 join할수 있게 yaml 파일을 작성한다.<br>
-token 과 caCertHashes를 위에서 생성한 토큰 값으로 변경한다.<br>
-apiServerEndpint에는 마스터노드의 ip를 입력한다.<br>
+수정할 부분:
+- apiServerEndpint: 마스터노드의 ip를 입력한다.<br>
+- token: 토큰값을 입력 위의 예제로는 cv12sz.s4bcbw1sazqh2vhe
+- caCertHashes: sha251 값으로 변경한다. sha256:c042559fa7680cc9492a6343123f35ecd3ea1e6f00325c4c4588abedc4d0d263<br>
 
 **kubeadm-join.yaml**
 ```
@@ -335,6 +370,7 @@ discovery:
 nodeRegistration:
   criSocket: unix:///var/run/containerd/containerd.sock
 ```
+
 
 ### 해당 파일을 사용하여 워커노드 join 
 **k8s_worker_join.yaml**

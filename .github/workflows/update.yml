@@ -1,0 +1,20 @@
+name: Update Contents List
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      - name: Run Script
+        run: python update_contents.py
+      - name: Commit and Push
+        run: |
+          git config --global user.name 'github-actions'
+          git config --global user.email 'action@github.com'
+          git add contents.html
+          git commit -m "Auto-update contents.html" || exit 0
+          git push

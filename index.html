@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Resume - Your Name" />
+  <title>Your Name | Resume</title>
+
+  <style>
+    :root{
+      --bg:#0b0f19;
+      --card:#101827;
+      --text:#e6edf3;
+      --muted:#9aa4b2;
+      --line:#1f2a3a;
+      --accent:#7aa2ff;
+      --chip:#0f223d;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+      --radius: 14px;
+      --max: 980px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    }
+
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      font-family: var(--sans);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, rgba(122,162,255,.18), transparent 60%),
+        radial-gradient(1000px 600px at 90% 0%, rgba(122,255,197,.10), transparent 55%),
+        var(--bg);
+      color: var(--text);
+      line-height:1.6;
+    }
+
+    a{ color: var(--text); text-decoration: none; }
+    a:hover{ color: var(--accent); }
+
+    .wrap{ max-width: var(--max); margin: 0 auto; padding: 36px 18px 70px; }
+    header{
+      display:flex; gap:18px; align-items:flex-start; justify-content:space-between;
+      padding: 22px 22px;
+      background: rgba(16,24,39,.72);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+    }
+    .title{
+      display:flex; flex-direction:column; gap:6px;
+    }
+    .name{
+      font-size: 28px; font-weight: 800; letter-spacing: -0.02em;
+    }
+    .role{
+      font-size: 14px; color: var(--muted);
+    }
+    .meta{
+      display:flex; flex-wrap:wrap; gap:10px 14px; margin-top:10px;
+      color: var(--muted); font-size: 13px;
+    }
+    .meta span{ display:flex; align-items:center; gap:8px; }
+    .meta code{ font-family: var(--mono); font-size: 12px; color: var(--text); background: rgba(255,255,255,.04); padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.06); }
+
+    .actions{
+      display:flex; flex-direction:column; gap:10px; align-items:flex-end;
+      min-width: 180px;
+    }
+    .btn{
+      width:100%;
+      display:inline-flex; align-items:center; justify-content:center;
+      gap:10px; padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.04);
+      color: var(--text);
+      transition: transform .08s ease, border-color .12s ease, background .12s ease;
+      font-size: 13px; font-weight: 650;
+    }
+    .btn:hover{ border-color: rgba(122,162,255,.55); background: rgba(122,162,255,.10); transform: translateY(-1px); }
+    .btn.primary{ background: rgba(122,162,255,.16); border-color: rgba(122,162,255,.55); }
+    .btn.primary:hover{ background: rgba(122,162,255,.22); }
+
+    main{ margin-top: 18px; display:grid; grid-template-columns: 1.2fr .8fr; gap: 18px; }
+    @media (max-width: 920px){
+      header{ flex-direction:column; }
+      .actions{ align-items:stretch; width:100%; min-width: unset; }
+      main{ grid-template-columns: 1fr; }
+    }
+
+    section{
+      background: rgba(16,24,39,.72);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+      padding: 18px 18px;
+    }
+    h2{
+      margin: 0 0 12px;
+      font-size: 14px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .p{ margin: 0; color: var(--text); }
+    .muted{ color: var(--muted); }
+
+    .list{ display:flex; flex-direction:column; gap:12px; }
+    .item{
+      padding: 14px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.06);
+      background: rgba(255,255,255,.03);
+    }
+    .item-top{
+      display:flex; align-items:flex-start; justify-content:space-between; gap: 12px;
+    }
+    .item-title{
+      font-weight: 750;
+      letter-spacing: -0.01em;
+    }
+    .item-sub{ font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .item-time{ font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+    .bullets{ margin: 10px 0 0; padding-left: 18px; color: var(--text); }
+    .bullets li{ margin: 6px 0; }
+    .chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top: 10px; }
+    .chip{
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(122,162,255,.18);
+      background: rgba(15,34,61,.55);
+      color: var(--text);
+      font-family: var(--mono);
+    }
+
+    .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 520px){ .grid2{ grid-template-columns: 1fr; } }
+
+    footer{
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align:center;
+    }
+    .kbd{
+      font-family: var(--mono);
+      font-size: 12px;
+      border: 1px solid rgba(255,255,255,.14);
+      padding: 2px 8px;
+      border-radius: 8px;
+      background: rgba(255,255,255,.03);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <div class="title">
+        <div class="name">홍길동</div>
+        <div class="role">Backend / Game Server Engineer · C++ · Distributed Systems</div>
+
+        <div class="meta">
+          <span>📍 <span class="muted">Seoul, KR</span></span>
+          <span>✉️ <a href="mailto:you@example.com"><code>you@example.com</code></a></span>
+          <span>🔗 <a href="https://github.com/yourid" target="_blank" rel="noreferrer"><code>github.com/yourid</code></a></span>
+          <span>🧾 <a href="https://www.linkedin.com/in/yourid" target="_blank" rel="noreferrer"><code>linkedin.com/in/yourid</code></a></span>
+        </div>
+      </div>
+
+      <div class="actions">
+        <!-- PDF 이력서가 있으면 resume.pdf를 같은 리포지토리에 올리고 링크만 유지 -->
+        <a class="btn primary" href="./resume.pdf" target="_blank" rel="noreferrer">PDF Resume</a>
+        <a class="btn" href="#projects">Projects</a>
+        <a class="btn" href="#experience">Experience</a>
+      </div>
+    </header>
+
+    <main>
+      <div class="left">
+        <section>
+          <h2>Summary</h2>
+          <p class="p">
+            <!-- TODO: 요약 3~4문장 -->
+            대규모 실시간 서비스/게임 서버에서 네트워크, 동시성, 상태 동기화, 경로 탐색(NavMesh) 등을 중심으로
+            설계·구현·운영 경험이 있습니다. 안정성(장애 대응/관측성)과 성능(지연/처리량)을 우선으로,
+            확장 가능한 아키텍처와 명확한 인터페이스를 선호합니다.
+          </p>
+          <div class="chips" style="margin-top:14px;">
+            <!-- TODO: 핵심 기술 -->
+            <span class="chip">C++17/20</span>
+            <span class="chip">TCP/UDP</span>
+            <span class="chip">Linux</span>
+            <span class="chip">Redis</span>
+            <span class="chip">gRPC</span>
+            <span class="chip">RecastNavigation</span>
+          </div>
+        </section>
+
+        <section id="experience" style="margin-top:18px;">
+          <h2>Experience</h2>
+          <div class="list">
+            <div class="item">
+              <div class="item-top">
+                <div>
+                  <div class="item-title">Company A · Senior Backend Engineer</div>
+                  <div class="item-sub">Realtime game server, matchmaking, state sync</div>
+                </div>
+                <div class="item-time">2023.01 – Present</div>
+              </div>
+              <ul class="bullets">
+                <li>서버 아키텍처(게이트웨이/채널/월드) 설계 및 운영, P99 latency 개선.</li>
+                <li>세션/인증/채널 라우팅 및 장애 전파 차단(회로차단/재시도 정책) 도입.</li>
+                <li>관측성(로그/메트릭/트레이싱) 정비로 MTTR 단축.</li>
+              </ul>
+              <div class="chips">
+                <span class="chip">C++</span><span class="chip">epoll</span><span class="chip">Redis</span><span class="chip">K8s</span>
+              </div>
+            </div>
+
+            <div class="item">
+              <div class="item-top">
+                <div>
+                  <div class="item-title">Company B · Backend Engineer</div>
+                  <div class="item-sub">Platform services, payments, community</div>
+                </div>
+                <div class="item-time">2020.03 – 2022.12</div>
+              </div>
+              <ul class="bullets">
+                <li>핵심 도메인(주문/정산) 서비스 분리 및 트랜잭션 경계 재정의.</li>
+                <li>대용량 배치 처리 성능 개선(병렬화/인덱스/쿼리 최적화).</li>
+              </ul>
+              <div class="chips">
+                <span class="chip">Go</span><span class="chip">PostgreSQL</span><span class="chip">Kafka</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="projects" style="margin-top:18px;">
+          <h2>Projects</h2>
+          <div class="list">
+            <div class="item">
+              <div class="item-top">
+                <div>
+                  <div class="item-title">
+                    <a href="https://github.com/yourid/yourproject" target="_blank" rel="noreferrer">
+                      Server-side NavMesh & Agent System
+                    </a>
+                  </div>
+                  <div class="item-sub">RecastNavigation 기반 서버 경로 탐색/에이전트 업데이트</div>
+                </div>
+                <div class="item-time">2025</div>
+              </div>
+              <ul class="bullets">
+                <li>맵 로딩/타일 분할/쿼리 API 제공, 멀티스레드 안전성 고려.</li>
+                <li>에이전트 이동/충돌 단순화(가벼운 physics) 및 틱 기반 시뮬레이션.</li>
+              </ul>
+              <div class="chips">
+                <span class="chip">C++</span><span class="chip">Recast/Detour</span><span class="chip">ECS-ish</span>
+              </div>
+            </div>
+
+            <div class="item">
+              <div class="item-top">
+                <div>
+                  <div class="item-title">
+                    <a href="https://github.com/yourid/another" target="_blank" rel="noreferrer">
+                      Type-safe FSM in C++
+                    </a>
+                  </div>
+                  <div class="item-sub">컴파일 타임 전이 검증, 상태/이벤트 타입 안전성</div>
+                </div>
+                <div class="item-time">2025</div>
+              </div>
+              <ul class="bullets">
+                <li>전이 테이블을 템플릿으로 모델링, 잘못된 전이를 컴파일 에러로 처리.</li>
+              </ul>
+              <div class="chips">
+                <span class="chip">C++20</span><span class="chip">Templates</span><span class="chip">Concepts</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="right">
+        <section>
+          <h2>Skills</h2>
+          <div class="grid2">
+            <div class="item">
+              <div class="item-title">Backend</div>
+              <div class="item-sub">API, DB, cache, messaging</div>
+              <div class="chips">
+                <span class="chip">Redis</span><span class="chip">PostgreSQL</span><span class="chip">Kafka</span><span class="chip">gRPC</span>
+              </div>
+            </div>
+            <div class="item">
+              <div class="item-title">Systems</div>
+              <div class="item-sub">Perf, concurrency, Linux</div>
+              <div class="chips">
+                <span class="chip">epoll</span><span class="chip">profiling</span><span class="chip">lock-free</span><span class="chip">observability</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section style="margin-top:18px;">
+          <h2>Education</h2>
+          <div class="item">
+            <div class="item-top">
+              <div>
+                <div class="item-title">OO University</div>
+                <div class="item-sub">B.S. Computer Science</div>
+              </div>
+              <div class="item-time">2016 – 2020</div>
+            </div>
+            <ul class="bullets">
+              <li>주요 과목: 운영체제, 네트워크, 분산시스템, 컴파일러</li>
+            </ul>
+          </div>
+        </section>
+
+        <section style="margin-top:18px;">
+          <h2>Links</h2>
+          <div class="list">
+            <div class="item">
+              <div class="item-title"><a href="https://github.com/yourid" target="_blank" rel="noreferrer">GitHub</a></div>
+              <div class="item-sub muted">코드 / 프로젝트</div>
+            </div>
+            <div class="item">
+              <div class="item-title"><a href="https://www.linkedin.com/in/yourid" target="_blank" rel="noreferrer">LinkedIn</a></div>
+              <div class="item-sub muted">경력 / 네트워크</div>
+            </div>
+            <div class="item">
+              <div class="item-title"><a href="https://blog.yoursite.com" target="_blank" rel="noreferrer">Blog</a></div>
+              <div class="item-sub muted">아키텍처/회고/기술 글</div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer>
+      Tip: GitHub Pages 사용 시 <span class="kbd">username.github.io</span> 리포지토리에 이 파일을 <span class="kbd">index.html</span>로 올리면 됩니다.
+    </footer>
+  </div>
+</body>
+</html>
